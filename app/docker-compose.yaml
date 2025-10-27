@@ -1,0 +1,297 @@
+version: "3.9"
+
+x-common-env: &common_env
+  ENVIRONMENT: production
+  LOG_LEVEL: ${LOG_LEVEL:-warn}
+  # Database (required)
+  DB_HOST: ${DB_HOST}
+  DB_PORT: ${DB_PORT:-5432}
+  DB_NAME: ${DB_NAME}
+  DB_USER: ${DB_USER}
+  DB_PASSWORD: ${DB_PASSWORD}
+  # Redis (optional if the service uses it)
+  REDIS_HOST: ${REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  REDIS_DB: ${REDIS_DB:-0}
+  # SMTP (optional)
+  SMTP_HOST: ${SMTP_HOST}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER}
+  SMTP_PASSWORD: ${SMTP_PASSWORD}
+  # gRPC service discovery (internal DNS via compose service names)
+  AUTH_SERVICE_URL: auth-service:9090
+  USER_SERVICE_URL: user-service:9090
+  TENANT_SERVICE_URL: tenant-service:9090
+  ADMIN_SERVICE_URL: admin-service:9090
+  STAFF_SERVICE_URL: staff-service:9090
+  PAYROLL_SERVICE_URL: payroll-service:9090
+  PROJECT_SERVICE_URL: projects-service:9090
+  CRM_SERVICE_URL: crm-service:9090
+  FINANCE_SERVICE_URL: finance-service:9090
+  ANALYTICS_SERVICE_URL: analytics-service:9090
+  AUTHORIZATION_SERVICE_URL: authorization-service:9090
+  DOCUMENTS_SERVICE_URL: documents-service:9090
+  NOTIFICATIONS_SERVICE_URL: notifications-service:9090
+
+networks:
+  erp-net:
+    driver: bridge
+
+services:
+  # Reverse proxy replicating Helm ingress rules:
+  ingress:
+    image: nginx:1.25-alpine
+    container_name: erp-ingress
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/erp-ingress.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - auth-service
+      - user-service
+      - tenant-service
+      - admin-service
+      - staff-service
+      - payroll-service
+      - projects-service
+      - crm-service
+      - finance-service
+      - analytics-service
+      - authorization-service
+      - documents-service
+      - notifications-service
+      - erp-app
+      - admin-dashboard
+    networks:
+      - erp-net
+
+  # erp-app:
+  #   image: ghcr.io/Ayist-Erp-System/erp-app-frontend:${TAG_APP_FRONTEND:-latest}
+  #   restart: unless-stopped
+  #   environment:
+  #     NODE_ENV: production
+  #     API_BASE_URL: /api
+  #   networks:
+  #     - erp-net
+
+  # admin-dashboard:
+  #   image: ghcr.io/Ayist-Erp-System/erp-admin-dashboard:${TAG_ADMIN_DASHBOARD:-latest}
+  #   restart: unless-stopped
+  #   environment:
+  #     NODE_ENV: production
+  #     API_BASE_URL: /api
+  #   networks:
+  #     - erp-net
+
+  auth-service:
+    image: ghcr.io/Ayist-Erp-System/erp-auth-service:${TAG_AUTH:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      # Service-specific
+      GIN_MODE: release
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: auth_schema
+      JWT_ISSUER: ${JWT_ISSUER:-ayist}
+      JWT_ACCESS_EXPIRATION: ${JWT_ACCESS_EXPIRATION:-15m}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-168h}
+      BCRYPT_COST: ${BCRYPT_COST:-12}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-100}
+      MAX_LOGIN_ATTEMPTS: ${MAX_LOGIN_ATTEMPTS:-5}
+      LOCKOUT_DURATION: ${LOCKOUT_DURATION:-15m}
+      TOTP_ISSUER: ${TOTP_ISSUER:-ayist}
+      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-8}
+      PASSWORD_MAX_LENGTH: ${PASSWORD_MAX_LENGTH:-64}
+      PASSWORD_REQUIRE_UPPERCASE: ${PASSWORD_REQUIRE_UPPERCASE:-true}
+      PASSWORD_REQUIRE_LOWERCASE: ${PASSWORD_REQUIRE_LOWERCASE:-true}
+      PASSWORD_REQUIRE_NUMBERS: ${PASSWORD_REQUIRE_NUMBERS:-true}
+      PASSWORD_REQUIRE_SPECIAL: ${PASSWORD_REQUIRE_SPECIAL:-true}
+      # Secrets
+      JWT_SECRET: ${AUTH_JWT_SECRET}
+    networks:
+      - erp-net
+
+  admin-service:
+    image: ghcr.io/Ayist-Erp-System/erp-admin-service:${TAG_ADMIN:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      GIN_MODE: release
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: admin_schema
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+      JWT_SECRET: ${ADMIN_JWT_SECRET}
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  user-service:
+    image: ghcr.io/Ayist-Erp-System/erp-user-service:${TAG_USER:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      GIN_MODE: release
+      APP_PORT: ":8080"
+      GRPC_PORT: ":9090"
+      DB_SCHEMA: users_schema
+      AUTH_GRPC_URL: auth-service:9090
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  tenant-service:
+    image: ghcr.io/Ayist-Erp-System/erp-tenant-service:${TAG_TENANT:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      GIN_MODE: release
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: tenant_schema
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  authorization-service:
+    image: ghcr.io/Ayist-Erp-System/erp-authorization-service:${TAG_AUTHZ:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      GIN_MODE: release
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: tenant_schema
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  staff-service:
+    image: ghcr.io/Ayist-Erp-System/erp-staff-service:${TAG_STAFF:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: staff_schema
+      # Explicit gRPC URLs used by this service
+      AUTH_SERVICE_URL: auth-service:9090
+      USER_SERVICE_URL: user-service:9090
+      PAYROLL_SERVICE_URL: payroll-service:9090
+      PROJECT_SERVICE_URL: projects-service:9090
+    depends_on:
+      - auth-service
+      - user-service
+      - payroll-service
+      - projects-service
+    networks:
+      - erp-net
+
+  payroll-service:
+    image: ghcr.io/Ayist-Erp-System/erp-payroll-service:${TAG_PAYROLL:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      GIN_MODE: release
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: payroll_schema
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  projects-service:
+    image: ghcr.io/Ayist-Erp-System/erp-projects-service:${TAG_PROJECTS:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      NODE_ENV: production
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: projects_schema
+      AUTH_SERVICE_URL: auth-service:9090
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  crm-service:
+    image: ghcr.io/Ayist-Erp-System/erp-crm-service:${TAG_CRM:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      NODE_ENV: production
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: crm_schema
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  documents-service:
+    image: ghcr.io/Ayist-Erp-System/erp-documents-service:${TAG_DOCS:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      GIN_MODE: release
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: documents_schema
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  notifications-service:
+    image: ghcr.io/Ayist-Erp-System/erp-notifications-service:${TAG_NOTIFICATIONS:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      NODE_ENV: production
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: notifications_schema
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+
+  analytics-service:
+    image: ghcr.io/Ayist-Erp-System/erp-analytics-service:${TAG_ANALYTICS:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: analytics_schema
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
