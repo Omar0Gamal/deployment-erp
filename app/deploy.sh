@@ -38,7 +38,6 @@ LOG_LEVEL=warn
 DB_HOST=
 DB_PORT=5432
 DB_NAME=
-DB_USER=
 DB_PASSWORD=
 
 # Redis (optional)

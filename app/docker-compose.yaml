@@ -3,23 +3,18 @@ version: "3.9"
 x-common-env: &common_env
   ENVIRONMENT: production
   LOG_LEVEL: ${LOG_LEVEL:-warn}
-  # Database (required)
   DB_HOST: ${DB_HOST}
   DB_PORT: ${DB_PORT:-5432}
   DB_NAME: ${DB_NAME}
-  DB_USER: ${DB_USER}
   DB_PASSWORD: ${DB_PASSWORD}
-  # Redis (optional if the service uses it)
   REDIS_HOST: ${REDIS_HOST}
   REDIS_PORT: ${REDIS_PORT:-6379}
   REDIS_PASSWORD: ${REDIS_PASSWORD}
   REDIS_DB: ${REDIS_DB:-0}
-  # SMTP (optional)
   SMTP_HOST: ${SMTP_HOST}
   SMTP_PORT: ${SMTP_PORT:-587}
   SMTP_USER: ${SMTP_USER}
   SMTP_PASSWORD: ${SMTP_PASSWORD}
-  # gRPC service discovery (internal DNS via compose service names)
   AUTH_SERVICE_URL: auth-service:9090
   USER_SERVICE_URL: user-service:9090
   TENANT_SERVICE_URL: tenant-service:9090
@@ -39,7 +34,6 @@ networks:
     driver: bridge
 
 services:
-  # Reverse proxy replicating Helm ingress rules:
   ingress:
     image: nginx:1.25-alpine
     container_name: erp-ingress
@@ -62,39 +56,18 @@ services:
       - authorization-service
       - documents-service
       - notifications-service
-      - erp-app
-      - admin-dashboard
     networks:
       - erp-net
-
-  # erp-app:
-  #   image: ghcr.io/ayist-erp-system/app-frontend:${TAG_APP_FRONTEND:-latest}
-  #   restart: unless-stopped
-  #   environment:
-  #     NODE_ENV: production
-  #     API_BASE_URL: /api
-  #   networks:
-  #     - erp-net
-
-  # admin-dashboard:
-  #   image: ghcr.io/ayist-erp-system/admin-dashboard:${TAG_ADMIN_DASHBOARD:-latest}
-  #   restart: unless-stopped
-  #   environment:
-  #     NODE_ENV: production
-  #     API_BASE_URL: /api
-  #   networks:
-  #     - erp-net
-
   auth-service:
     image: ghcr.io/ayist-erp-system/auth-service:${TAG_AUTH:-latest}
     restart: unless-stopped
     environment:
       <<: *common_env
-      # Service-specific
       GIN_MODE: release
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: auth_schema
+      DB_USER: auth_user
       JWT_ISSUER: ${JWT_ISSUER:-ayist}
       JWT_ACCESS_EXPIRATION: ${JWT_ACCESS_EXPIRATION:-15m}
       JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-168h}
@@ -109,7 +82,6 @@ services:
       PASSWORD_REQUIRE_LOWERCASE: ${PASSWORD_REQUIRE_LOWERCASE:-true}
       PASSWORD_REQUIRE_NUMBERS: ${PASSWORD_REQUIRE_NUMBERS:-true}
       PASSWORD_REQUIRE_SPECIAL: ${PASSWORD_REQUIRE_SPECIAL:-true}
-      # Secrets
       JWT_SECRET: ${AUTH_JWT_SECRET}
     networks:
       - erp-net
@@ -123,6 +95,7 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: admin_schema
+      DB_USER: admin_user
       auth_Grpc_Host: auth-service
       auth_Grpc_Port: "9090"
       JWT_SECRET: ${ADMIN_JWT_SECRET}
@@ -137,9 +110,10 @@ services:
     environment:
       <<: *common_env
       GIN_MODE: release
-      APP_PORT: ":8080"
-      GRPC_PORT: ":9090"
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
       DB_SCHEMA: users_schema
+      DB_USER: users_user
       AUTH_GRPC_URL: auth-service:9090
     depends_on:
       - auth-service
@@ -155,6 +129,7 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: tenant_schema
+      DB_USER: tenant_user
       auth_Grpc_Host: auth-service
       auth_Grpc_Port: "9090"
     depends_on:
@@ -169,7 +144,8 @@ services:
       GIN_MODE: release
       APP_PORT: "8080"
       GRPC_PORT: "9090"
-      DB_SCHEMA: tenant_schema
+      DB_SCHEMA: authorization_schema
+      DB_USER: authorization_user
       auth_Grpc_Host: auth-service
       auth_Grpc_Port: "9090"
     depends_on:
@@ -185,7 +161,7 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: staff_schema
-      # Explicit gRPC URLs used by this service
+      DB_USER: staff_user
       AUTH_SERVICE_URL: auth-service:9090
       USER_SERVICE_URL: user-service:9090
       PAYROLL_SERVICE_URL: payroll-service:9090
@@ -207,6 +183,7 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: payroll_schema
+      DB_USER: payroll_user
       auth_Grpc_Host: auth-service
       auth_Grpc_Port: "9090"
     depends_on:
@@ -223,6 +200,7 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: projects_schema
+      DB_USER: projects_user
       AUTH_SERVICE_URL: auth-service:9090
     depends_on:
       - auth-service
@@ -238,6 +216,7 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: crm_schema
+      DB_USER: crm_user
       auth_Grpc_Host: auth-service
       auth_Grpc_Port: "9090"
     depends_on:
@@ -254,6 +233,7 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: documents_schema
+      DB_USER: documents_user
       auth_Grpc_Host: auth-service
       auth_Grpc_Port: "9090"
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
@@ -273,6 +253,7 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: notifications_schema
+      DB_USER: notifications_user
       auth_Grpc_Host: auth-service
       auth_Grpc_Port: "9090"
     depends_on:
@@ -288,6 +269,23 @@ services:
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: analytics_schema
+      DB_USER: analytics_user
+      auth_Grpc_Host: auth-service
+      auth_Grpc_Port: "9090"
+    depends_on:
+      - auth-service
+    networks:
+      - erp-net
+  finance-service:
+    image: ghcr.io/ayist-erp-system/finance-service:${TAG_FINANCE:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      GIN_MODE: release
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: finance_schema
+      DB_USER: finance_user
       auth_Grpc_Host: auth-service
       auth_Grpc_Port: "9090"
     depends_on:
