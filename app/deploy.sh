@@ -7,15 +7,7 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="docker-compose.yaml"
 ENV_FILE=".env"
 
-# Find docker compose CLI
-if docker compose version >/dev/null 2>&1; then
-    DC="docker compose"
-elif command -v docker-compose >/dev/null 2>&1; then
-    DC="docker-compose"
-else
-    echo "Error: Docker Compose is not installed." >&2
-    exit 1
-fi
+DC="docker compose"
 
 # Basic checks
 if ! command -v docker >/dev/null 2>&1; then
