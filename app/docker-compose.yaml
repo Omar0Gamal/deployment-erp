@@ -1,5 +1,3 @@
-version: "3.9"
-
 x-common-env: &common_env
   ENVIRONMENT: production
   LOG_LEVEL: ${LOG_LEVEL:-warn}
