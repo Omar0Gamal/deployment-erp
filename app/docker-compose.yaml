@@ -26,6 +26,7 @@ x-common-env: &common_env
   AUTHORIZATION_SERVICE_URL: authorization-service:9090
   DOCUMENTS_SERVICE_URL: documents-service:9090
   NOTIFICATIONS_SERVICE_URL: notifications-service:9090
+  VENDOR_SERVICE_URL: vendor-service:9090
 
 networks:
   erp-net:
@@ -38,8 +39,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/erp-ingress.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
     depends_on:
       - auth-service
       - user-service
@@ -54,6 +57,7 @@ services:
       - authorization-service
       - documents-service
       - notifications-service
+      - vendor-service
     networks:
       - erp-net
   auth-service:
@@ -81,6 +85,10 @@ services:
       PASSWORD_REQUIRE_NUMBERS: ${PASSWORD_REQUIRE_NUMBERS:-true}
       PASSWORD_REQUIRE_SPECIAL: ${PASSWORD_REQUIRE_SPECIAL:-true}
       JWT_SECRET: ${AUTH_JWT_SECRET}
+    depends_on:
+      - tenant-service
+      - user-service
+      - authorization-service
     networks:
       - erp-net
 
@@ -94,11 +102,12 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: admin_schema
       DB_USER: admin_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
       JWT_SECRET: ${ADMIN_JWT_SECRET}
     depends_on:
+      - tenant-service
+      - staff-service
       - auth-service
+      - authorization-service
     networks:
       - erp-net
 
@@ -112,7 +121,6 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: users_schema
       DB_USER: users_user
-      AUTH_GRPC_URL: auth-service:9090
     depends_on:
       - auth-service
     networks:
@@ -128,8 +136,6 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: tenant_schema
       DB_USER: tenant_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
     depends_on:
       - auth-service
     networks:
@@ -144,9 +150,8 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: authorization_schema
       DB_USER: authorization_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
     depends_on:
+      - tenant-service
       - auth-service
     networks:
       - erp-net
@@ -160,14 +165,10 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: staff_schema
       DB_USER: staff_user
-      AUTH_SERVICE_URL: auth-service:9090
-      USER_SERVICE_URL: user-service:9090
-      PAYROLL_SERVICE_URL: payroll-service:9090
-      PROJECT_SERVICE_URL: projects-service:9090
     depends_on:
       - auth-service
-      - user-service
       - payroll-service
+      - user-service
       - projects-service
     networks:
       - erp-net
@@ -182,8 +183,6 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: payroll_schema
       DB_USER: payroll_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
     depends_on:
       - auth-service
     networks:
@@ -199,7 +198,6 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: projects_schema
       DB_USER: projects_user
-      AUTH_SERVICE_URL: auth-service:9090
     depends_on:
       - auth-service
     networks:
@@ -215,8 +213,6 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: crm_schema
       DB_USER: crm_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
     depends_on:
       - auth-service
     networks:
@@ -232,13 +228,14 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: documents_schema
       DB_USER: documents_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_ENDPOINT: ${S3_ENDPOINT}
+      MINIO_ACCESS_KEY: ${S3_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${S3_SECRET_KEY}
+      MINIO_ENDPOINT: ${S3_ENDPOINT}
+
     depends_on:
       - auth-service
+      - tenant-service
+      - authorization-service
     networks:
       - erp-net
 
@@ -252,8 +249,6 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: notifications_schema
       DB_USER: notifications_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
     depends_on:
       - auth-service
     networks:
@@ -268,8 +263,6 @@ services:
       GRPC_PORT: "9090"
       DB_SCHEMA: analytics_schema
       DB_USER: analytics_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
     depends_on:
       - auth-service
     networks:
@@ -279,14 +272,31 @@ services:
     restart: unless-stopped
     environment:
       <<: *common_env
-      GIN_MODE: release
       APP_PORT: "8080"
       GRPC_PORT: "9090"
       DB_SCHEMA: finance_schema
       DB_USER: finance_user
-      auth_Grpc_Host: auth-service
-      auth_Grpc_Port: "9090"
     depends_on:
       - auth-service
+      - documents-service
+      - authorization-service
+      - projects-service
+    networks:
+      - erp-net
+  vendor-service:
+    image: ghcr.io/ayist-erp-system/vendor-service:${TAG_VENDOR:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *common_env
+      GIN_MODE: release
+      APP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DB_SCHEMA: vendor_schema
+      DB_USER: vendor_user
+    depends_on:
+      - auth-service
+      - authorization-service
+      - finance-service
+      - documents-service
     networks:
       - erp-net
